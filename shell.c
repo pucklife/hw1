@@ -8,6 +8,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <stdbool.h>
+#include <sys/stat.h> 
+#include <fcntl.h>
 
 #define INPUT_STRING_SIZE 80
 
@@ -23,8 +25,8 @@ int cmd_quit(tok_t arg[]) {
 }
 
 int cmd_help(tok_t arg[]);
-
 int cmd_cd(tok_t argl[]);
+int cmd_fork(tok_t argl[]);
 
 /* Command Lookup table */
 typedef int cmd_fun_t (tok_t args[]); /* cmd functions take token array and return int */
@@ -76,6 +78,103 @@ int cmd_cd(tok_t argl[]) {
  		}
 	}
 	return 1;
+}
+
+int cmd_fork(tok_t argl[]){
+	pid_t cpid, tcpid, cpgid;
+
+	cpid = fork();	
+	if (cpid == -1){
+      		perror("fork error");
+      		exit(EXIT_FAILURE);
+        } 
+        else if( cpid > 0 ) { // parent process
+    		int status;
+    		pid_t tcpid = wait(&status);
+    		if (tcpid == -1){
+    			perror("wait error");
+  		}	
+        }
+        else if( cpid == 0 ){ // child process
+        	int tokNum;
+        	char file[48];
+        	exFile(argl,'>',&tokNum,file);
+		if(tokNum != -1){
+			int fd;
+			fd = open(file, O_WRONLY | O_CREAT, S_IRUSR | S_IWUSR);
+			if(fd>-1){
+				printf("Redirecting output to %s.\n",file);
+				if(dup2(fd,STDOUT_FILENO)==-1){
+					printf("Redirect stdout problem.\n");
+				}	
+			}
+			else{printf("Opening redirect file problem.\n");}
+			
+		}
+		exFile(argl,'<',&tokNum,file);
+		if(tokNum != -1){
+			int fd;
+			fd = open(file, O_RDONLY, S_IRUSR | S_IWUSR);
+			if(fd>-1){
+				printf("Redirecting input from %s.\n",file);
+				if(dup2(fd,STDIN_FILENO)==-1){
+					printf("Redirect stdin problem.\n");
+				}	
+			}
+			else{printf("Opening redirect file problem.\n");}
+			
+		}
+		int position = checkTok4char(argl,'/',&tokNum);
+		if(position == 0){
+			execv(argl[0],argl);
+		}
+		else{
+			tok_t *paths = getToks(getenv("PATH"));
+			int i;
+			char fullpathname[40];
+			for (i=0 ; paths[i] != NULL ; i++){
+				strcpy(fullpathname,paths[i]);
+				strcat(fullpathname,"/");
+				strcat(fullpathname,argl[0]);
+				if((execv(fullpathname,argl))!=-1){
+      					exit(EXIT_SUCCESS);	
+      				}
+			}
+			
+			perror("Error");
+      			exit(EXIT_SUCCESS);
+        	}
+        }
+}
+
+void exFile(tok_t* argl,char sign,int* tokNum,char *file){
+	int i;
+	int position = checkTok4char(argl,sign,tokNum);
+	if(position == 0){
+		// e.g. wc shell.c >test
+		if(strlen(argl[*tokNum])>1){
+			strcpy(file,(argl[*tokNum]+sizeof(char)));
+		}
+		// e.g. wc shell.c > test
+		else{strcpy(file,argl[*tokNum+1]);}
+		for(i=*tokNum ; argl[i]!=NULL ; i++){
+			argl[i]=NULL;
+		}
+	}
+	else if (position > 0){
+		// e.g. wc shell.c> test
+		if(strlen(argl[*tokNum])-1==position){
+			argl[*tokNum][position*sizeof(char)]=NULL;
+			strcpy(file,argl[*tokNum+1]);
+		}
+		// e.g. wc shell.c>test
+		else{	strcpy(file,&argl[*tokNum][(position+1)*sizeof(char)]);
+			argl[*tokNum][position*sizeof(char)]=NULL;
+		}
+		for(i=*tokNum+1 ; argl[i]!=NULL ; i++){
+			argl[i]=NULL;
+		}	
+	}
 }
 
 void init_shell()
@@ -133,7 +232,7 @@ int shell (int argc, char *argv[]) {
   int fundex = -1;
   pid_t pid = getpid();		/* get current processes PID */
   pid_t ppid = getppid();	/* get parents PID */
-  pid_t cpid, tcpid, cpgid;
+  
 
   init_shell();
   
@@ -150,33 +249,9 @@ int shell (int argc, char *argv[]) {
     fundex = lookup(t[0]); /* Is first token a shell literal */
     if(fundex >= 0) cmd_table[fundex].fun(&t[1]);
     else {
-      cpid = fork();
-      if (cpid == -1){
-      	perror("fork error");
-      	exit(EXIT_FAILURE);
-      } 
-      else if( cpid > 0 ) { // parent process
-    	int status;
-    	pid_t tcpid = wait(&status);
-    	if (tcpid == -1){
-    		perror("wait error");
-  	}
-      }
-      else if( cpid == 0 ){ // child process
-	tok_t *paths = getToks(getenv("PATH"));
-	int i;
-	char fullpathname[40];
-	for (i=0 ; paths[i] != NULL ; i++){
-		strcpy(fullpathname,paths[i]);
-		strcat(fullpathname,"/");
-		strcat(fullpathname,t[0]);
-		if((execv(fullpathname,t))!=-1){
-      			exit(EXIT_SUCCESS);	
-      		}
-	}
-	perror("Error");
-      	exit(EXIT_SUCCESS);
-      }
+    	if(t[0]){
+      		cmd_fork(t);
+      	}
     }
     getcwd(buf, sizeof(buf));
     fprintf(stdout, "%d:%s$ ", lineNum, buf);

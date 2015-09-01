@@ -32,6 +32,19 @@ void freeToks(tok_t *toks) {
   free(toks);
 }
 
+int checkTok4char(tok_t *tokens, char ch, int* tokNum){
+	for((*tokNum)=0 ; tokens[*tokNum] ; (*tokNum)++){
+		int place;
+		for(place=0 ; tokens[*tokNum][place] ; place++){
+			if (tokens[*tokNum][place]==ch){
+				return place;
+			}
+		}
+	}
+	(*tokNum) = -1;
+	return -1;	
+}
+
 void fprintTok(FILE *ofile, tok_t *t) {
   int i;
   for (i=0; i<MAXTOKS && t[i]; i++) {
