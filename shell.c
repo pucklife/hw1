@@ -9,7 +9,6 @@
 #include <sys/wait.h>
 #include <stdbool.h>
 
-
 #define INPUT_STRING_SIZE 80
 
 #include "io.h"
@@ -24,6 +23,7 @@ int cmd_quit(tok_t arg[]) {
 }
 
 int cmd_help(tok_t arg[]);
+
 int cmd_cd(tok_t argl[]);
 
 /* Command Lookup table */
@@ -57,11 +57,6 @@ int lookup(char cmd[]) {
 }
 
 int cmd_cd(tok_t argl[]) {
-	if (*argl != NULL){	
-		if (argl[strlen(argl)-1] == '/'){
-			argl[strlen(argl)-1] = '\0';
-		}
-	}
 	if (*argl == NULL) {
 		chdir (getenv("HOME"));
 	}
@@ -82,7 +77,6 @@ int cmd_cd(tok_t argl[]) {
 	}
 	return 1;
 }
-
 
 void init_shell()
 {
@@ -139,7 +133,7 @@ int shell (int argc, char *argv[]) {
   int fundex = -1;
   pid_t pid = getpid();		/* get current processes PID */
   pid_t ppid = getppid();	/* get parents PID */
-  
+  pid_t cpid, tcpid, cpgid;
 
   init_shell();
   
@@ -156,7 +150,24 @@ int shell (int argc, char *argv[]) {
     fundex = lookup(t[0]); /* Is first token a shell literal */
     if(fundex >= 0) cmd_table[fundex].fun(&t[1]);
     else {
-    	fprintf(stdout, "This shell only supports built-ins. Replace this to run programs as commands.\n");
+      cpid = fork();
+      if (cpid == -1){
+      	perror("fork error");
+      	exit(EXIT_FAILURE);
+      } 
+      else if( cpid > 0 ) { // parent process
+    	int status;
+    	pid_t tcpid = wait(&status);
+    	if (tcpid == -1){
+    		perror("wait error");
+  	}
+      }
+      else if( cpid == 0 ){ // child process
+      	if((execv(t[0],t))==-1){
+      			perror("Error");	
+      	}
+      	exit(EXIT_SUCCESS);
+      }
     }
     getcwd(buf, sizeof(buf));
     fprintf(stdout, "%d:%s$ ", lineNum, buf);
