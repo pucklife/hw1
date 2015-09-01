@@ -163,9 +163,18 @@ int shell (int argc, char *argv[]) {
   	}
       }
       else if( cpid == 0 ){ // child process
-      	if((execv(t[0],t))==-1){
-      			perror("Error");	
-      	}
+	tok_t *paths = getToks(getenv("PATH"));
+	int i;
+	char fullpathname[40];
+	for (i=0 ; paths[i] != NULL ; i++){
+		strcpy(fullpathname,paths[i]);
+		strcat(fullpathname,"/");
+		strcat(fullpathname,t[0]);
+		if((execv(fullpathname,t))!=-1){
+      			exit(EXIT_SUCCESS);	
+      		}
+	}
+	perror("Error");
       	exit(EXIT_SUCCESS);
       }
     }

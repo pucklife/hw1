@@ -32,7 +32,6 @@ void freeToks(tok_t *toks) {
   free(toks);
 }
 
-
 void fprintTok(FILE *ofile, tok_t *t) {
   int i;
   for (i=0; i<MAXTOKS && t[i]; i++) {
